@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>백테스트 결과 필터링 도구</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        h2 { margin-bottom: 1.5rem; color: #333; font-weight: 700; font-size: 1.5rem; }
+        
+        .form-group { margin-bottom: 1.2rem; text-align: left; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #555; }
+        
+        input[type="number"], input[type="file"] {
+            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+            box-sizing: border-box; font-family: 'Malgun Gothic', sans-serif; background-color: #fcfcfc;
+        }
+
+        .btn-container { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+
+        button {
+            width: 100%; padding: 14px; color: white; border: none; border-radius: 8px;
+            font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: background 0.3s;
+            font-family: 'Malgun Gothic', sans-serif;
+        }
+        
+        .btn-filter { background-color: #dc3545; }
+        .btn-filter:hover { background-color: #a71d2a; }
+
+        .status-msg { margin-top: 1.5rem; font-size: 0.9rem; color: #666; min-height: 20px; }
+        .success { color: #28a745 !important; font-weight: bold; }
+        .error { color: #dc3545 !important; font-weight: bold; }
+
+        .info-text {
+            font-size: 0.85rem; color: #888; margin-top: 10px; line-height: 1.4;
+            text-align: left; background: #f8f9fa; padding: 10px; border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🎯 손절 그룹 필터링 도구</h2>
+    
+    <div class="form-group">
+        <label for="excelFile">결과 엑셀 파일 선택 (.xlsx)</label>
+        <input type="file" id="excelFile" accept=".xlsx">
+    </div>
+
+    <div class="form-group">
+        <label for="nValue">필터링 기준 (n회 이상 손절 시 제거)</label>
+        <input type="number" id="nValue" value="1" min="1">
+    </div>
+
+    <div class="btn-container">
+        <button class="btn-filter" onclick="filterAndRebuild()">필터링 및 재정리 다운로드</button>
+    </div>
+    
+    <div id="statusMsg" class="status-msg">파일을 업로드하고 기준 값을 입력하세요.</div>
+
+    <div class="info-text">
+        • <b>작동 원리:</b> 하단 개별 그룹 중 '손절횟수'가 n회 이상인 그룹을 삭제합니다.<br>
+        • <b>자동 계산:</b> 남은 그룹들을 합산하여 상단의 '총익절금액', '전체승률' 등 요약 정보를 자동으로 갱신합니다.
+    </div>
+</div>
+
+<script>
+    // --- 유틸리티 함수 ---
+    function cleanNumber(val) {
+        if (!val) return 0;
+        if (typeof val === 'number') return val;
+        return parseFloat(String(val).replace(/[^\d.-]/g, '')) || 0;
+    }
+
+    function calculateWinRate(win, loss) {
+        const total = win + loss;
+        return total === 0 ? "0.000%" : ((win / total) * 100).toFixed(3) + "%";
+    }
+
+    // 스타일 적용 (기존 코드의 스타일 로직 활용)
+    function applyStyle(ws) {
+        ws['!cols'] = [{wch: 22}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 12}, {wch: 12}, {wch: 15}];
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const addr = XLSX.utils.encode_cell({r: R, c: C});
+                if (!ws[addr]) continue;
+                ws[addr].s = {
+                    font: { name: "맑은 고딕", sz: 10 },
+                    alignment: { vertical: "center", horizontal: (C === 0 ? "left" : "right") },
+                    border: {
+                        top: {style:"thin", color:{rgb:"D3D3D3"}}, bottom: {style:"thin", color:{rgb:"D3D3D3"}},
+                        left: {style:"thin", color:{rgb:"D3D3D3"}}, right: {style:"thin", color:{rgb:"D3D3D3"}}
+                    }
+                };
+                if (R === 0 || R === 4) { // 헤더행
+                    ws[addr].s.fill = { fgColor: { rgb: "F2F2F2" } };
+                    ws[addr].s.font.bold = true;
+                    ws[addr].s.alignment.horizontal = "center";
+                }
+            }
+        }
+    }
+
+    async function filterAndRebuild() {
+        const fileInput = document.getElementById('excelFile');
+        const nInput = document.getElementById('nValue');
+        const statusDiv = document.getElementById('statusMsg');
+
+        if (!fileInput.files.length) {
+            statusDiv.innerHTML = "<span class='error'>파일을 선택해주세요.</span>";
+            return;
+        }
+
+        const nLimit = parseInt(nInput.value);
+        const file = fileInput.files[0];
+        statusDiv.innerText = "데이터 분석 중...";
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const ws = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(ws, {header: 1});
+
+                if (jsonData.length < 6) {
+                    throw new Error("엑셀 형식이 올바르지 않습니다.");
+                }
+
+                // 1. 데이터 분리
+                // 0: 전체헤더, 1: 전체데이터, 2-3: 공백, 4: 그룹헤더, 5~: 그룹데이터
+                const groupHeader = jsonData[4];
+                const rawGroups = jsonData.slice(5);
+
+                // 2. 필터링 (손절횟수는 보통 10번째 인덱스 - '손절횟수')
+                const lossIdx = groupHeader.indexOf("손절횟수");
+                if (lossIdx === -1) throw new Error("'손절횟수' 컬럼을 찾을 수 없습니다.");
+
+                const filteredGroups = rawGroups.filter(row => {
+                    if (!row || row.length === 0) return false;
+                    return cleanNumber(row[lossIdx]) < nLimit;
+                });
+
+                // 3. 전체 통계 재계산
+                let totalStats = {
+                    winAmt: 0, lossAmt: 0, fee: 0, realized: 0, unrealized: 0, net: 0, winCnt: 0, lossCnt: 0
+                };
+
+                filteredGroups.forEach(g => {
+                    totalStats.winAmt += cleanNumber(g[3]); // 익절금액
+                    totalStats.lossAmt += cleanNumber(g[4]); // 손절금액
+                    totalStats.fee += cleanNumber(g[5]); // 수수료
+                    totalStats.realized += cleanNumber(g[6]); // 확정손익
+                    totalStats.unrealized += cleanNumber(g[7]); // 미실현
+                    totalStats.net += cleanNumber(g[8]); // 순이익
+                    totalStats.winCnt += cleanNumber(g[9]); // 익절횟수
+                    totalStats.lossCnt += cleanNumber(g[10]); // 손절횟수
+                });
+
+                // 4. 새 엑셀 데이터 구성
+                const newTotalRow = [
+                    filteredGroups.length, jsonData[1][1], jsonData[1][2], // 그룹수, 시작일, 종료일
+                    totalStats.winAmt, totalStats.lossAmt, totalStats.fee,
+                    totalStats.realized, totalStats.unrealized, totalStats.net,
+                    totalStats.winCnt, totalStats.lossCnt, calculateWinRate(totalStats.winCnt, totalStats.lossCnt)
+                ];
+
+                const finalData = [
+                    jsonData[0], // 상단 헤더
+                    newTotalRow,
+                    [], [],      // 공백
+                    groupHeader, // 그룹 헤더
+                    ...filteredGroups
+                ];
+
+                // 5. 파일 생성 및 다운로드
+                const newWs = XLSX.utils.aoa_to_sheet(finalData);
+                applyStyle(newWs);
+                const newWb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(newWb, newWs, "Filtered_Result");
+                
+                const fileName = `필터링_결과_n${nLimit}미만.xlsx`;
+                XLSX.writeFile(newWb, fileName);
+
+                statusDiv.innerHTML = `<span class='success'>✅ 필터링 완료! (남은 그룹: ${filteredGroups.length}개)</span>`;
+
+            } catch (err) {
+                console.error(err);
+                statusDiv.innerHTML = `<span class='error'>오류: ${err.message}</span>`;
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+</script>
+
+</body>
+</html>

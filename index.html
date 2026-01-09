@@ -3,47 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>백테스트 통합 필터링 도구</title>
+    <title>백테스트 통합 필터링 도구 (수동 다운로드)</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.min.js"></script>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .container { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width: 100%; max-width: 600px; text-align: center; }
+        .container { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width: 100%; max-width: 650px; text-align: center; }
         h2 { margin-bottom: 1.5rem; color: #333; font-weight: 700; }
         .form-group { margin-bottom: 1.2rem; text-align: left; }
         label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #555; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; margin-bottom: 10px; }
-        button { width: 100%; padding: 15px; color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; background-color: #007bff; transition: 0.3s; }
-        button:hover { background-color: #0056b3; }
-        .status-msg { margin-top: 1.5rem; font-size: 0.9rem; color: #666; white-space: pre-line; text-align: left; }
-        .info { font-size: 0.85rem; color: #666; margin-top: 20px; text-align: left; background: #fff4f4; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545; }
+        
+        /* 메인 실행 버튼 */
+        .btn-main { width: 100%; padding: 15px; color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; background-color: #007bff; transition: 0.3s; }
+        .btn-main:hover { background-color: #0056b3; }
+
+        /* 결과 리스트 스타일 */
+        #downloadArea { margin-top: 25px; text-align: left; display: none; border-top: 2px solid #eee; padding-top: 20px; }
+        .download-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f8f9fa; margin-bottom: 8px; border-radius: 6px; border: 1px solid #e9ecef; }
+        .file-name { font-size: 0.9rem; color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
+        .btn-download { padding: 6px 12px; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+        .btn-download:hover { background-color: #218838; }
+
+        .status-msg { margin-top: 1.5rem; font-size: 0.9rem; color: #666; white-space: pre-line; }
         .success { color: #28a745; font-weight: bold; }
         .error { color: #dc3545; font-weight: bold; }
+        .info { font-size: 0.85rem; color: #666; margin-top: 20px; text-align: left; background: #fff4f4; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>📊 다중 파일 통합 필터링</h2>
+    <h2>📊 통합 필터링 (수동 다운로드형)</h2>
     
     <div class="form-group">
-        <label>엑셀 파일들 선택 (다중 선택 가능)</label>
+        <label>엑셀 파일들 선택 (다중 선택)</label>
         <input type="file" id="excelFiles" accept=".xlsx" multiple>
     </div>
 
     <div class="form-group">
-        <label>기준 입력 (전체 파일 합산 n회 이상 손절 시 제거)</label>
+        <label>기준 입력 (합산 n회 이상 손절 시 제거)</label>
         <input type="number" id="nValue" value="1" min="1">
     </div>
 
-    <button onclick="processMultipleFiles()">통합 분석 및 개별 다운로드</button>
+    <button class="btn-main" onclick="processFiles()">파일 분석 시작</button>
     
-    <div id="statusMsg" class="status-msg">파일들을 업로드하면 분석을 시작합니다.</div>
+    <div id="statusMsg" class="status-msg">파일을 업로드하고 분석 버튼을 눌러주세요.</div>
+
+    <div id="downloadArea">
+        <h3 style="font-size: 1rem; margin-bottom: 15px;">📥 분석 완료 파일 목록</h3>
+        <div id="downloadList"></div>
+    </div>
 
     <div class="info">
-        <b>⚠️ 주의사항:</b><br>
-        1. 모든 파일에서 동일한 <b>Group Name</b>을 찾아 손절 횟수를 합산합니다.<br>
-        2. 합산 결과가 기준치 이상인 그룹은 <b>모든 파일에서 제외</b>됩니다.<br>
-        3. 브라우저 설정에 따라 <b>여러 파일 다운로드 권한</b> 허용이 필요할 수 있습니다.
+        <b>💡 사용 방법:</b><br>
+        1. 파일을 여러 개 올리고 분석 버튼을 클릭합니다.<br>
+        2. 분석이 끝나면 하단에 <b>파일별 다운로드 버튼</b>이 생성됩니다.<br>
+        3. 각 버튼을 클릭하여 결과 파일을 하나씩 저장하세요.
     </div>
 </div>
 
@@ -56,11 +71,9 @@
 
     function calcWinRate(win, loss) {
         const total = win + loss;
-        if (total === 0) return "0.000%";
-        return ((win / total) * 100).toFixed(3) + "%";
+        return total === 0 ? "0.000%" : ((win / total) * 100).toFixed(3) + "%";
     }
 
-    // 엑셀 스타일 (기존 형식 유지)
     function applyStyle(ws) {
         ws['!cols'] = [{wch: 22}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 12}, {wch: 12}, {wch: 15}];
         const range = XLSX.utils.decode_range(ws['!ref']);
@@ -85,24 +98,29 @@
         }
     }
 
-    async function processMultipleFiles() {
+    async function processFiles() {
         const fileInput = document.getElementById('excelFiles');
         const nLimit = parseInt(document.getElementById('nValue').value);
         const status = document.getElementById('statusMsg');
+        const downloadArea = document.getElementById('downloadArea');
+        const downloadList = document.getElementById('downloadList');
 
         if (!fileInput.files.length) {
             status.innerHTML = "<span class='error'>파일을 업로드해주세요.</span>";
             return;
         }
 
-        status.innerText = "1단계: 모든 파일 데이터 통합 분석 중...";
+        // 초기화
+        downloadList.innerHTML = "";
+        downloadArea.style.display = "none";
+        status.innerText = "데이터 분석 중...";
         
         const files = Array.from(fileInput.files);
-        const allFileData = [];
-        const globalLossMap = {}; // GroupName별 누적 손절 횟수 저장
+        const globalLossMap = {};
+        const parsedFiles = [];
 
         try {
-            // 1. 모든 파일 읽기 및 전역 손절 횟수 합산
+            // 1. 데이터 파싱 및 손절 횟수 합산
             for (const file of files) {
                 const data = await file.arrayBuffer();
                 const wb = XLSX.read(data, {type: 'array'});
@@ -114,33 +132,26 @@
 
                 groups.forEach(row => {
                     const name = String(row[0]).trim();
-                    const lossCnt = cleanNum(row[10]); // 손절횟수 인덱스
+                    const lossCnt = cleanNum(row[10]);
                     globalLossMap[name] = (globalLossMap[name] || 0) + lossCnt;
                 });
-
-                allFileData.push({ name: file.name, rows, groupHeaderIdx });
+                parsedFiles.push({ name: file.name, rows, groupHeaderIdx });
             }
 
-            // 2. 제외 대상 그룹 선별
+            // 2. 블랙리스트 생성
             const blackList = new Set();
             for (const name in globalLossMap) {
-                if (globalLossMap[name] >= nLimit) {
-                    blackList.add(name);
-                }
+                if (globalLossMap[name] >= nLimit) blackList.add(name);
             }
 
-            status.innerText = `2단계: 필터링 적용 및 파일 생성 중... (제외 그룹: ${blackList.size}개)`;
-
-            // 3. 파일별 필터링, 재계산 및 다운로드
-            for (const fileObj of allFileData) {
+            // 3. 파일 재생성 및 다운로드 링크 구축
+            for (const fileObj of parsedFiles) {
                 const { name, rows, groupHeaderIdx } = fileObj;
                 const groupHeader = rows[groupHeaderIdx];
                 const originalGroups = rows.slice(groupHeaderIdx + 1);
 
-                // 통합 블랙리스트에 없는 그룹만 필터링
                 const filtered = originalGroups.filter(row => row.length > 0 && !blackList.has(String(row[0]).trim()));
 
-                // 수치 재계산
                 let stats = { winAmt:0, lossAmt:0, fee:0, realized:0, unrealized:0, net:0, winCnt:0, lossCnt:0 };
                 filtered.forEach(row => {
                     stats.winAmt += cleanNum(row[3]); stats.lossAmt += cleanNum(row[4]);
@@ -162,16 +173,41 @@
                 const newWb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(newWb, newWs, "Filtered");
 
-                // 파일 다운로드 실행
-                XLSX.writeFile(newWb, `필터완료_${name}`);
+                // Blob 생성 및 다운로드 링크 추가
+                const wbOut = XLSX.write(newWb, { bookType: 'xlsx', type: 'binary', cellStyles: true });
+                const blob = new Blob([s2ab(wbOut)], { type: "application/octet-stream" });
+                const url = URL.createObjectURL(blob);
+                
+                createDownloadItem(name, url);
             }
 
-            status.innerHTML = `<span class='success'>✅ 모든 처리 완료!\n총 ${files.length}개의 파일을 다운로드했습니다.\n(합산 손절 ${nLimit}회 이상인 그룹 ${blackList.size}개 일괄 제거됨)</span>`;
+            status.innerHTML = `<span class='success'>✅ 분석 완료! 총 ${files.length}개의 결과가 준비되었습니다.\n(합산 손절 ${nLimit}회 이상인 그룹 ${blackList.size}개 제거됨)</span>`;
+            downloadArea.style.display = "block";
 
         } catch (err) {
             console.error(err);
-            status.innerHTML = `<span class='error'>처리 중 오류 발생: ${err.message}</span>`;
+            status.innerHTML = `<span class='error'>오류 발생: ${err.message}</span>`;
         }
+    }
+
+    // 파일 이름과 URL을 받아 다운로드 행을 생성
+    function createDownloadItem(fileName, url) {
+        const downloadList = document.getElementById('downloadList');
+        const div = document.createElement('div');
+        div.className = 'download-item';
+        div.innerHTML = `
+            <span class="file-name">필터완료_${fileName}</span>
+            <a href="${url}" download="필터완료_${fileName}" class="btn-download">다운로드</a>
+        `;
+        downloadList.appendChild(div);
+    }
+
+    // Binary string to ArrayBuffer 변환 유틸리티
+    function s2ab(s) {
+        const buf = new ArrayBuffer(s.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
     }
 </script>
 
